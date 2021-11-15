@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 project(ultra VERSION 0.0.1)
 
 add_subdirectory(dependencies/JUCE)
+add_subdirectory(dependencies/capstone-master)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -21,6 +22,7 @@ target_sources(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME}
 	PRIVATE
+		dependencies/capstone-master/include
 )
 
 target_compile_definitions(${PROJECT_NAME}
@@ -51,6 +53,7 @@ target_link_libraries(${PROJECT_NAME}
 		juce::juce_opengl
 		juce::juce_audio_basics
 		juce::juce_audio_devices
+		capstone-static
 	PUBLIC
 		juce::juce_recommended_config_flags
 		#juce::juce_recommended_lto_flags

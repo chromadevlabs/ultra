@@ -498,6 +498,7 @@ struct UltraEditorApp : JUCEApplication
 	void initialise(const juce::String& commandLine) override
 	{
 		cpu_run_tests();
+		quit();
 		
 		// init the debugger
 		// all cpu ops are done on the debugger thread

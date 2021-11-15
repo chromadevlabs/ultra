@@ -29,6 +29,16 @@ constexpr bool str_find(const char* s1, const char* s2)
 	return true;
 };
 
+void disassembler_init()
+{
+	/*std::sort(encodings.begin(), encodings.end(), 
+		[](const EncodingDescriptor& d1, const EncodingDescriptor& d2)
+		{
+			return d1.mask < d2.mask;
+		}
+	);*/
+}
+
 const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode)
 {
 	for (const auto& encoding : encodings)

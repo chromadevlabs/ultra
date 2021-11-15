@@ -26,6 +26,15 @@ struct EncodingDescriptor
 	constexpr bool match(uint32_t op) const 
 	{
 		auto masked = op & mask;
+		
+		if (op == 0x00000009 && type == InstructionType::JALR)
+		{
+			printf("\n0x%08X OP\n", op);
+			printf("0x%08X MASK\n", mask);
+			printf("0x%08X BITS\n", bits);
+			printf("0x%08X MASKED\n", masked);
+		}
+		
 		return masked == bits;
 	}
 
@@ -49,6 +58,8 @@ struct EncodingDescriptor
 		return mask;
 	}
 };
+
+void disassembler_init();
 
 const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode);
 

@@ -214,23 +214,25 @@ R4300_IMPL(InstructionType::XORI, xori,
 /**************************************************************************/
 // Branch
 /**************************************************************************/
+R4300_IMPL(InstructionType::JR, jr,
+	ENCODING(INST(0b000000), RT(0b000000), RD(0b000000), SHIFT(0b000000), FUNC(0b001001)),
+	FORMAT("RS"));
+
+R4300_IMPL(InstructionType::JR, jr,
+	ENCODING(INST(0b000000), RT(0b000000), RD(0b000000), SHIFT(0b000000), FUNC(0b001000)),
+	FORMAT("RS"));
+	void cpu_jr(ExecutionContext& ctx)
+	{
+		branch_delay_slot_address = cpu.pc + 4;
+		cpu.pc = ctx.rs();
+	}
+	
 R4300_IMPL(InstructionType::J, j,
 	ENCODING(INST(0b000010)),
 	FORMAT("TARGET"));
 	void cpu_j(ExecutionContext& ctx)
 	{
 		branch_delay_slot_address = cpu.pc + 4;
-		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() << 2);
-	}
-
-R4300_IMPL(InstructionType::JAL, jal,
-	ENCODING(INST(0b000011)),
-	FORMAT("TARGET"));
-	void cpu_jal(ExecutionContext& ctx)
-	{
-		branch_delay_slot_address = cpu.pc + 4;
-
-		cpu_link(cpu.pc + 8);
 		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() << 2);
 	}
 
@@ -244,13 +246,16 @@ R4300_IMPL(InstructionType::JALR, jalr,
 		cpu.pc = ctx.rs();
 	}
 
-R4300_IMPL(InstructionType::JR, jr,
-	ENCODING(INST(0b000000), RT(0b000000), RD(0b000000), SHIFT(0b000000), FUNC(0b001000)),
-	FORMAT("RS"));
-	void cpu_jr(ExecutionContext& ctx)
+
+R4300_IMPL(InstructionType::JAL, jal,
+	ENCODING(INST(0b000011)),
+	FORMAT("TARGET"));
+	void cpu_jal(ExecutionContext& ctx)
 	{
 		branch_delay_slot_address = cpu.pc + 4;
-		cpu.pc = ctx.rs();
+
+		cpu_link(cpu.pc + 8);
+		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() << 2);
 	}
 
 R4300_IMPL(InstructionType::BEQ, beq,
