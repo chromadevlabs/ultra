@@ -17,8 +17,8 @@
 #define rcast					reinterpret_cast
 #define dcast					dynamic_cast
 
-#define CONCAT_IMPL(x, y) x##y
-#define CONCAT(x, y) CONCAT_IMPL(x, y)
+#define CONCAT_IMPL(x, y) 		x##y
+#define CONCAT(x, y) 			CONCAT_IMPL(x, y)
 
 template<typename T>
 constexpr bool get_bit_left_aligned(T value, int index)
@@ -68,7 +68,7 @@ constexpr T extract_bits_left_aligned(T value, int begin, int end)
 }
 
 template<typename T, typename TT>
-constexpr bool any(T t, TT tt)
+constexpr bool any(const T& t, TT tt)
 {
 	for (const auto& _tt : tt)
 		if (_tt == t)

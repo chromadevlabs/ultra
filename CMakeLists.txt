@@ -14,7 +14,9 @@ target_sources(${PROJECT_NAME}
 		main.cpp
 		cpu.cpp
 		memory.cpp
-		parser.cpp
+		cpu_instructions.cpp
+		disassembler.cpp
+		tests.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

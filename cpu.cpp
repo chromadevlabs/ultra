@@ -6,26 +6,13 @@
 #include "platform.h"
 #include "cpu_types.h"
 #include "cartridge.h"
+#include "disassembler.h"
 
-#include <vector>
 #include <cstring>
 
 // Implemented in parser.cpp
 const char* parser_get_symbolic_gpr_name(int i);
 const char* parser_get_symbolic_cop0_name(int i);
-
-char log_buffer[512]{};
-static std::function<void(const char*)> log_callback;
-
-void set_log_callback(std::function<void(const char*)>&& callback)
-{
-	log_callback = std::move(callback);
-}
-
-void print_log(const char* message)
-{
-	log_callback(message);
-}
 
 struct RSP
 {
@@ -35,7 +22,6 @@ struct RSP
 
 CPU cpu{};
 
-std::vector<EncodingDescriptor> encodings;
 uint64_t branch_delay_slot_address{};
 uint64_t cycle_counter{};
 
@@ -306,20 +292,15 @@ void cpu_init()
 	memory_write32(0x04300004, 0x01010101);
 	/*******************************************************/
 
-	printf("\n");
+	//printf("loading rom /Users/chroma/Desktop/ultra/sm64.z64\n");
+	//memory_load_rom("/Users/chroma/Desktop/ultra/sm64.z64");
 
-	memory_load_rom("/Users/chroma/Desktop/ultra/sm64.z64");
+	//printf("Copying rom code to rdram...");
+	//memory_do_dma(0xA4000000, 0xB0000000, 0x1000);
+	//printf("OK!\n");
 
-	printf("Copying rom code to rdram...");
-	memory_do_dma(0xA4000000, 0xB0000000, 0x1000);
-	printf("OK!\n");
-
-	cpu.pc = 0xA4000040;
-
-	//freopen("output.txt", "wa", stdout);
+	cpu.pc = 0xFFFFFFFFA4000040;
 }
-
-bool logging_enabled{true};
 
 void cpu_link(uint64_t address)
 {
@@ -328,109 +309,8 @@ void cpu_link(uint64_t address)
 
 void cpu_trap(const char*)
 {
-	debug_log("!!!!!!!!TRAP!!!!!!!!!!\n");
+	//debug_log("!!!!!!!!TRAP!!!!!!!!!!\n");
 	throw nullptr;
-}
-
-void print_debugger_instruction(uint32_t opcode, const EncodingDescriptor* ed, ExecutionContext& ctx)
-{
-	if (ed)
-	{
-		char state_buffer[512]{};
-		char* sbuf = state_buffer;
-
-		debug_log("0x%016llX: %08X:\t%-6s ", cpu.pc, opcode, magic_enum::enum_name(ed->type).data());
-
-		auto* str = ed->debug_format;
-
-		auto find = [](const char* s1, const char* s2)
-		{
-			while (*s2)
-			{
-				if (*s1 != *s2)
-					return false;
-
-				s1++;
-				s2++;
-			}
-
-			return true;
-		};
-
-		while (*str)
-		{
-			if (find(str, "RTI"))
-			{
-				debug_log("%d", (uint8_t)GET_RT_BITS(opcode));
-				str += 3;
-			}
-			else if (find(str, "COP_RD"))
-			{
-				debug_log("%s", parser_get_symbolic_cop0_name(GET_RD_BITS(opcode)));		
-				str += 6;
-			}
-			else if (find(str, "RS"))
-			{
-				auto index = GET_RS_BITS(opcode);
-				debug_log("%s", parser_get_symbolic_gpr_name(index));
-				sbuf += sprintf(sbuf, "0x%08X", (uint32_t)cpu.gpr[index]);
-				str += 2;
-			}
-			else if (find(str, "RT"))
-			{
-				auto index = GET_RT_BITS(opcode);
-				debug_log("%s", parser_get_symbolic_gpr_name(index));
-				sbuf += sprintf(sbuf, "0x%08X", (uint32_t)cpu.gpr[index]);
-				str += 2;
-			}
-			else if (find(str, "RD"))
-			{
-				auto index = GET_RD_BITS(opcode);
-				debug_log("%s", parser_get_symbolic_gpr_name(index));
-				sbuf += sprintf(sbuf, "0x%08X", (uint32_t)cpu.gpr[index]);
-				str += 2;
-			}
-			else if (find(str, "IMM"))
-			{
-				auto index = GET_IMM_BITS(opcode);
-				debug_log("0x%04X", (uint16_t)index);
-				sbuf += sprintf(sbuf, "0x%08X", (uint32_t)index);
-				str += 3;
-			}
-			else if (find(str, "SA"))
-			{
-				auto index = GET_IMM_BITS(opcode);
-				debug_log("%d", GET_SHIFT_BITS(opcode));
-				sbuf += sprintf(sbuf, "%d", GET_SHIFT_BITS(opcode));
-				str += 2;
-			}
-			else if (find(str, "OFFSET"))
-			{
-				debug_log("%d", (int16_t)GET_IMM_BITS(opcode));
-				sbuf += sprintf(sbuf, "%d", (int16_t)GET_IMM_BITS(opcode));
-				str += 6;
-			}
-			else if (find(str, "TARGET"))
-			{
-				auto address = (cpu.pc & 0xF0000000) + (GET_JMP_BITS(opcode) << 2);
-				debug_log("0x%08X", address);
-				sbuf += sprintf(sbuf, "0x%016llX", address);
-				str += 6;
-			}
-			else
-			{
-				debug_log("%c", *str);
-				sbuf += sprintf(sbuf, "%c", *str);
-				str++;
-			}
-		}
-
-		debug_log("\t%-35s", state_buffer);
-	}
-	else
-	{
-		debug_log("0x%016llX: %08X: \n", cpu.pc, opcode);
-	}
 }
 
 uint64_t& cpu_get_gp_register(int index)
@@ -438,23 +318,38 @@ uint64_t& cpu_get_gp_register(int index)
 	return cpu.gpr[index];
 }
 
+uint64_t& cpu_get_cp0_register(int index)
+{
+	return cpu.cop0[index];
+}
+
+uint64_t& cpu_get_pc_register()
+{
+	return cpu.pc;
+}
+
+uint32_t& cpu_get_lo_register()
+{
+	return cpu.lo;
+}
+
+uint32_t& cpu_get_hi_register()
+{
+	return cpu.hi;
+}
+
+uint64_t cpu_get_next_instruction_address()
+{
+	return branch_delay_slot_address ? branch_delay_slot_address : cpu.pc;
+}
+
 bool cpu_step()
 {
 	uint32_t opcode{};
 	uint64_t program_counter{};
+	static uint64_t previous_address{};
 
-	auto parse_opcode = [](uint32_t opcode)->const EncodingDescriptor*
-	{
-		for (const auto& desc : encodings)
-		{
-			if (desc.match(opcode))
-				return &desc;
-		}
-
-		return nullptr;
-	};
-
-	// execute the delay branch slot if filled
+	// fill this execution with the delay slot address
 	if (branch_delay_slot_address != 0)
 	{
 		program_counter = branch_delay_slot_address;
@@ -466,110 +361,51 @@ bool cpu_step()
 		program_counter = cpu.pc;
 	}
 
-	// shit loop detection to stop log spam
-	static const auto address_history_size{8};
-	static uint64_t addresses[address_history_size]{};
-	static int loop_counter{};
-	static uint64_t pre_loop_gpr_state[32]{};
-	bool loop_detected{false};
-	for (int i = 0; i < address_history_size-1; i++)
-		addresses[i] = addresses[i + 1];
-
-	for (int i = 0; i < address_history_size-1; i++)
+	if (previous_address == program_counter)
 	{
-		if (addresses[i] == program_counter)
-		{
-			loop_detected = true;
-			break;
-		}
-	}
-
-	addresses[address_history_size - 1] = program_counter;
-
-	if (logging_enabled && loop_detected)
-	{
-		// loop enter, store cpu state to compare later
-		debug_log("Loop enter @ 0x%016llX\n", program_counter);
-		memcpy(pre_loop_gpr_state, cpu.gpr, 32 * sizeof(uint64_t));
-		logging_enabled = false;
-	}
-	else if (logging_enabled == false && loop_detected == false)
-	{
-		// loop exit
-		logging_enabled = true;
-		debug_log("Loop ran %d times\n", loop_counter);
-
-		debug_log("Effected registers\n");
-		for (int i = 0; i < 32; i++)
-		{
-			if (pre_loop_gpr_state[i] != cpu.gpr[i])
-				debug_log("\t%s [0x%016llX] -> [0x%016llX]\n", parser_get_symbolic_gpr_name(i), pre_loop_gpr_state[i], cpu.gpr[i]);
-		}
-	}
-
-	// increment or clear the loop_counter
-	loop_counter = loop_detected ? loop_counter + 1 : 0;
-
-	if (loop_counter > 1 * 1000 * 1000)
-	{
-		logging_enabled = true;
-		printf("loop exceeded 1 million cycles\n");
-		
-		debug_log("Effected registers\n");
-		for (int i = 0; i < 32; i++)
-		{
-			if (pre_loop_gpr_state[i] != cpu.gpr[i])
-				debug_log("\t%s [0x%016llX] -> [0x%016llX]\n", parser_get_symbolic_gpr_name(i), pre_loop_gpr_state[i], cpu.gpr[i]);
-		}
-		
-		printf("\n");
+		printf("double execution error\n");
 		fflush(stdout);
 		throw nullptr;
 	}
-	
-	// zero register should always be zero
-	cpu.v0() = 0;
+
+	// reset r[0] to 0 every cycle
+	// the r0 access member handles this but internal CPU functions
+	// don't use the access members
+	cpu.gpr[0] = 0;
 
 	// random register
 	cpu.random() = ((cpu.wired() + rand()) & 0x3F);
 
 	// count register is incremented every other cycle
-	cpu.count() = cycle_counter % 2 ? cpu.count() + 1 : 0;
+	cpu.count() += cycle_counter && (cycle_counter % 2) ? 1 : 0;
 
-	try {
-		opcode = bswap_32(memory_read32(program_counter));
-	} catch (void*)
+	if (!memory_read32(program_counter, opcode))
 	{
-		debug_log("\n");
-		fflush(stdout);
+		printf("CPU: bad memory read\n");
 		return false;
 	}
 
-	const auto* op = parse_opcode(opcode);
+	// roms are typically big endian
+	//opcode = bswap_32(opcode);
+	const auto* op = disassembler_decode_instruction(opcode);
 	ExecutionContext ctx{opcode};
-
-	print_debugger_instruction(opcode, op, ctx);
 
 	if (op)
 	{
 		try {
+			// catch memory exceptions
 			op->func(ctx);
-		} catch (const void*)
+		} catch (const MemException& mem_ex)
 		{
-			printf("\n");
-			fflush(stdout);
+			printf("CPU: Memory Exception: %s\n", mem_ex.message);
 			return false;
 		}
 	}
 	else
 	{
-		printf("\n");
-		printf("\n!!!!!!!!!!!!!!!!unimplemented opcode!!!!!!!!!!!!!!!!\n");
-		fflush(stdout);
+		printf("CPU: Unknown opcode: %08X\n", opcode);
 		return false;
 	}
-
-	debug_log("\n");
 
 	cycle_counter++;
 

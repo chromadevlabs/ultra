@@ -14,16 +14,17 @@ void memory_install_rw_callback(
 	const char* name
 );
 
-void memory_read(uint32_t address, uint32_t size, void* data);
-void memory_write(uint32_t address, uint32_t size, const void* data);
-void memory_do_dma(uint32_t dst, uint32_t src, uint32_t size);
+bool memory_read(uint32_t address, uint32_t size, void* data);
+bool memory_write(uint32_t address, uint32_t size, const void* data);
+bool memory_do_dma(uint32_t dst, uint32_t src, uint32_t size);
 
-uint8_t memory_read8(uint32_t address);
-uint16_t memory_read16(uint32_t address);
-uint32_t memory_read32(uint32_t address);
-void memory_write8(uint32_t address, uint8_t data);
-void memory_write16(uint32_t address, uint16_t data);
-void memory_write32(uint32_t address, uint32_t data);
+bool memory_read8(uint32_t address, uint8_t&);
+bool memory_read16(uint32_t address, uint16_t&);
+bool memory_read32(uint32_t address, uint32_t&);
+
+bool memory_write8(uint32_t address, uint8_t data);
+bool memory_write16(uint32_t address, uint16_t data);
+bool memory_write32(uint32_t address, uint32_t data);
 
 void memory_load_rom(const char* path);
 CartHeader* memory_get_rom_header();

@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <initializer_list>
 #include <utility>
-#include <vector>
 #include <functional>
 
 #include "instruction_types.h"
@@ -34,12 +33,14 @@
 #define SET_IMM_BITS(value)			(value & 0xFFFF)
 #define SET_OFFSET_BITS(value)		SET_IMM_BITS(value)
 
-extern bool logging_enabled;
-extern char log_buffer[512];
-void print_log(const char* message);
-#define debug_log(...) if (logging_enabled) { sprintf(log_buffer, __VA_ARGS__); print_log(log_buffer); }
-
 using cpu_func_t = void(*)(struct ExecutionContext&);
+
+struct MemException
+{
+	const char* message;
+	uint32_t address;
+	uint32_t size;
+};
 
 template<typename T>
 struct MemoryMappedRegister
@@ -65,64 +66,30 @@ struct MemoryMappedRegister
 	}
 };
 
-struct EncodingDescriptor
-{
-	InstructionType type;
-	const char* debug_format;
-	cpu_func_t func;
-	uint32_t mask;
-	uint32_t bits;
-
-	constexpr EncodingDescriptor(InstructionType inst, std::initializer_list<std::pair<uint32_t, uint32_t>>&& descs, const char* debug_format_string, cpu_func_t _func) :
-		type(inst),
-		debug_format(debug_format_string),
-		func(_func),
-		mask(build_mask(descs)),
-		bits(build_bits(descs))
-	{
-	}
-
-	constexpr bool match(uint32_t op) const 
-	{
-		auto masked = op & mask;
-		return masked == bits;
-	}
-
-	static constexpr uint32_t build_bits(const std::initializer_list<std::pair<uint32_t, uint32_t>>& descs)
-	{
-		uint32_t bits{};
-
-		for (auto desc : descs)
-			bits |= desc.first;
-
-		return bits;
-	}
-
-	static constexpr uint32_t build_mask(const std::initializer_list<std::pair<uint32_t, uint32_t>>& descs)
-	{
-		uint32_t mask{};
-
-		for (auto desc : descs)
-			mask |= desc.second;
-
-		return mask;
-	}
-};
 
 //https://mathcs.holycross.edu/~csci226/MIPS/summaryHO.pdf
 struct CPU
 {
 	uint64_t gpr[32]{};
 	uint64_t pc{};
-	uint64_t hi{};
-	uint64_t lo{};
+
+	union
+	{
+		struct {
+			uint32_t lo;
+			uint32_t hi;
+		};
+
+		uint64_t hi_lo;
+	};
+
 	uint32_t fcr[2]{};
 	bool ll{};
 
 	uint64_t cop0[32]{};
 	float cop1[32]{};
 
-	auto& r0() { return gpr[0]; }
+	uint64_t r0() { return 0; }
 	auto& at() { return gpr[1]; }
 	
 	auto& v0() { return gpr[2]; }
@@ -189,7 +156,6 @@ struct CPU
 };
 
 extern CPU cpu;
-extern std::vector<EncodingDescriptor> encodings;
 extern uint64_t branch_delay_slot_address;
 extern uint64_t cycle_counter;
 

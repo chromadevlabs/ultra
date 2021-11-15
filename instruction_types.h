@@ -17,7 +17,7 @@ enum class InstructionType : uint8_t
 	EXT,
 	MFHI, MFLO, MTHI, MTLO, 
 	MULT, MULTU,
-	BEQ, BEQL, BGEZ, BGEZAL, BGTZ, BLEZ, BLTZ, BLTZAL,
+	BEQ, BEQL, BGEZ, BGEZAL, BGTZ, BLEZ, BLEZL, BLTZ, BLTZAL,
 	BNE, BNEL,
 	Break,
 	J, JAL, JALR, JR, 

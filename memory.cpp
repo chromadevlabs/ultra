@@ -118,7 +118,7 @@ void memory_install_rw_callback(
 }
 
 enum class ReadWrite { Read, Write };
-void memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
+bool memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
 {
 	switch (address)
 	{
@@ -143,7 +143,7 @@ void memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
 		// KSSEG  TLB mapping
 		case 0xC0000000 ... 0xDFFFFFFF: 
 			printf("\nUnsupported TLB access: KSSEG (0x%08X)\n", address);
-			throw nullptr;
+			return false;
 			break;
 		
 		// KSEG3  TLB mapping
@@ -169,81 +169,91 @@ void memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
 			{
 			case ReadWrite::Read:
 				entry.read(entry.range.map(address), size, data);
-				return;
+				return true;
 				break;
 			
 			case ReadWrite::Write:
 				entry.write(entry.range.map(address), size, data);
-				return;
+				return true;
 			}
 		}
 	}
 
 	printf("\nUnmapped memory access: 0x%08X::0x%08X\n", address, size);
-	throw nullptr;
+	return false;
 }
 
-void memory_read(uint32_t address, uint32_t size, void* data)
+bool memory_read(uint32_t address, uint32_t size, void* data)
 {
-	memory_map(ReadWrite::Read, address, size, data);
+	return memory_map(ReadWrite::Read, address, size, data);
 }
 
-void memory_write(uint32_t address, uint32_t size, const void* data)
+bool memory_write(uint32_t address, uint32_t size, const void* data)
 {
-	memory_map(ReadWrite::Write, address, size, (void*)data);
+	return memory_map(ReadWrite::Write, address, size, (void*)data);
 }
 
-void memory_do_dma(uint32_t dst, uint32_t src, uint32_t size)
+bool memory_do_dma(uint32_t dst, uint32_t src, uint32_t size)
 {
 	printf("\nmemory_do_dma 0x%08X -> 0x%08X::0x%X\n", src, dst, size);
 
 	for (uint32_t i = 0; i < size; i++)
 	{
-		memory_write8(dst, memory_read8(src));
+		uint8_t b{};
+
+		if (!memory_read8(src, b))
+			return false;
+			
+		if (!memory_write8(dst, b))
+			return false;
 
 		dst++;
 		src++;
 	}
+
+	return true;
 }
 
-uint8_t memory_read8(uint32_t address)
+bool memory_read8(uint32_t address, uint8_t& value)
 {
-	uint8_t value;
-	memory_read(address, 1, &value);
-	//printf("READ8: 0x%08X [%02X]", address, value);
-	return value;
+	return memory_read(address, 1, &value);
 }
 
-uint16_t memory_read16(uint32_t address)
+bool memory_read16(uint32_t address, uint16_t& value)
 {
-	uint16_t value;
-	memory_read(address, 2, &value);
-	//printf("READ16: 0x%08X [%04X]", address, value);
-	return value;
+	if (memory_read(address, 2, &value))
+	{
+		value = bswap_16(value);
+		return true;
+	}
+
+	return false;
 }
 
-uint32_t memory_read32(uint32_t address)
+bool memory_read32(uint32_t address, uint32_t& value)
 {
-	uint32_t value;
-	memory_read(address, 4, &value);
-	//printf("READ32: 0x%08X [%08X]", address, value);
-	return value;
+	if (memory_read(address, 4, &value))
+	{
+		value = bswap_32(value);
+		return true;
+	}
+
+	return false;
 }
 
-void memory_write8(uint32_t address, uint8_t data)
+bool memory_write8(uint32_t address, uint8_t data)
 {
-	//printf("WRITE8: 0x%08X [%02X]", address, data);
-	memory_write(address, 1, &data);
+	return memory_write(address, 1, &data);
 }
 
-void memory_write16(uint32_t address, uint16_t data)
+bool memory_write16(uint32_t address, uint16_t data)
 {
-	//printf("WRITE16: 0x%08X [%04X]", address, data);
-	memory_write(address, 2, &data);
+	data = bswap_16(data);
+	return memory_write(address, 2, &data);
 }
 
-void memory_write32(uint32_t address, uint32_t data)
+bool memory_write32(uint32_t address, uint32_t data)
 {
-	//printf("WRITE32: 0x%08X [%08X]", address, data);
-	memory_write(address, 4, &data);
+	data = bswap_32(data);
+	return memory_write(address, 4, &data);
 }
