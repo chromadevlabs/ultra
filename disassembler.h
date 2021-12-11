@@ -4,58 +4,91 @@
 #include "instruction_types.h"
 #include "cpu_types.h"
 
-// TODO: use constexpr variadic templates to build the encoding mask and bit fields
 struct EncodingDescriptor
 {
 	InstructionType type{};
 	const char* debug_format{};
-	cpu_func_t func{};
-	uint32_t mask{};
-	uint32_t bits{};
+	cpu_func_t func;
+
+	uint32_t mask;
+	uint32_t value;
 
 	constexpr EncodingDescriptor() = default;
-	constexpr EncodingDescriptor(InstructionType inst, std::initializer_list<std::pair<uint32_t, uint32_t>>&& descs, const char* debug_format_string, cpu_func_t _func) :
+	constexpr EncodingDescriptor(InstructionType inst, const char* descriptor, const char* debug_format_string, cpu_func_t _func) :
 		type(inst),
 		debug_format(debug_format_string),
 		func(_func),
-		mask(build_mask(descs)),
-		bits(build_bits(descs))
+		mask(gen_mask(descriptor)),
+		value(gen_value(descriptor))
 	{
+		assert(strlen(descriptor) == 32);
 	}
 
 	constexpr bool match(uint32_t op) const 
 	{
-		auto masked = op & mask;
-		
-		if (op == 0x00000009 && type == InstructionType::JALR)
-		{
-			printf("\n0x%08X OP\n", op);
-			printf("0x%08X MASK\n", mask);
-			printf("0x%08X BITS\n", bits);
-			printf("0x%08X MASKED\n", masked);
-		}
-		
-		return masked == bits;
+		return (op & mask) == value;
 	}
 
-	static constexpr uint32_t build_bits(const std::initializer_list<std::pair<uint32_t, uint32_t>>& descs)
-	{
-		uint32_t bits{};
-
-		for (auto desc : descs)
-			bits |= desc.first;
-
-		return bits;
-	}
-
-	static constexpr uint32_t build_mask(const std::initializer_list<std::pair<uint32_t, uint32_t>>& descs)
+	constexpr uint32_t gen_mask(const char* str)
 	{
 		uint32_t mask{};
+		uint32_t bit_index{31};
 
-		for (auto desc : descs)
-			mask |= desc.second;
+		while (*str)
+		{
+			switch (*str)
+			{
+				case '0':
+				case '1':
+					mask |= 1 << bit_index; 
+					break;
+				
+				case 's':
+				case 't':
+				case 'd':
+				case 'j':
+				case 'i':
+				case 'a':
+					break;
+
+				default: 
+					printf("unknown opcode bit type '%c'\n", *str);
+					assert(false);
+					break;
+			}
+
+			str++;
+			bit_index--;
+		}
 
 		return mask;
+	}
+
+	constexpr uint32_t gen_value(const char* str)
+	{
+		uint32_t value{};
+		uint32_t bit_index{31};
+
+		while (*str)
+		{
+			switch (*str)
+			{
+				case '0':
+					break;
+				
+				case '1': 
+					value |= 1 << bit_index;
+					break;
+					
+				default: 
+					break;
+			}
+
+			str++;
+			bit_index--;
+		}
+
+		return value;
 	}
 };
 

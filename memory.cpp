@@ -38,6 +38,7 @@ struct MemoryMapping
 	std::function<void(uint32_t, uint32_t, const void*)> write;
 };
 
+static bool logging_enabled{};
 static std::vector<MemoryMapping> mmu_map;
 
 void default_buffer_read(const void* buffer, uint32_t addr, uint32_t size, void* dst)
@@ -50,56 +51,55 @@ void default_buffer_write(void* buffer, uint32_t addr, uint32_t size, const void
 	memcpy((uint8_t*)buffer + addr, (const uint8_t*)src, size);
 }
 
-/*
-
-0x00000000	0x003FFFFF	RDRAM	RDRAM - built in
-0x00400000	0x007FFFFF	RDRAM	RDRAM - expansion pak (available if inserted)
-0x00800000	0x03EFFFFF	Unused	Unused
-0x03F00000	0x03FFFFFF	RDRAM Registers	RDRAM MMIO, configures timings, etc. Irrelevant for emulation
-0x04000000	0x04000FFF	SP DMEM	RSP Data Memory
-0x04001000	0x04001FFF	SP IMEM	RSP Instruction Memory
-0x04002000	0x0403FFFF	Unused	Unused
-0x04040000	0x040FFFFF	SP Registers	Control RSP DMA engine, status, program counter
-0x04100000	0x041FFFFF	DP Command Registers	Send commands to the RDP
-0x04200000	0x042FFFFF	DP Span Registers	Unknown
-0x04300000	0x043FFFFF	MIPS Interface (MI)	System information, interrupts.
-0x04400000	0x044FFFFF	Video Interface (VI)	Screen resolution, framebuffer settings
-0x04500000	0x045FFFFF	Audio Interface (AI)	Control the audio subsystem
-0x04600000	0x046FFFFF	Peripheral Interface (PI)	Control the cartridge interface. Set up DMAs cart <==> RDRAM
-0x04700000	0x047FFFFF	RDRAM Interface (RI)	Control RDRAM settings (timings?) Irrelevant for emulation.
-0x04800000	0x048FFFFF	Serial Interface (SI)	Control PIF RAM <==> RDRAM DMA engine
-0x04900000	0x04FFFFFF	Unused	Unused
-0x05000000	0x05FFFFFF	Cartridge Domain 2 Address 1	N64DD control registers - returns open bus (or all 0xFF) when not present
-0x06000000	0x07FFFFFF	Cartridge Domain 1 Address 1	N64DD IPL ROM - returns open bus (or all 0xFF) when not present
-0x08000000	0x0FFFFFFF	Cartridge Domain 2 Address 2	SRAM is mapped here
-0x10000000	0x1FBFFFFF	Cartridge Domain 1 Address 2	ROM is mapped here
-0x1FC00000	0x1FC007BF	PIF Boot Rom	First code run on boot. Baked into hardware.
-0x1FC007C0	0x1FC007FF	PIF RAM	Used to communicate with PIF chip (controllers, memory cards)
-0x1FC00800	0x1FCFFFFF	Reserved	 
-0x1FD00000	0x7FFFFFFF	Cartridge Domain 1 Address 3
-0x80000000	0xFFFFFFFF	Unknown	Unknown
-
-*/
-
 void memory_init()
 {
 	mmu_map.clear();
 }
 
-extern uint8_t cartridge_rom[MB(64)];
+std::vector<uint64_t> breakpoints;
 
-void memory_load_rom(const char* path)
+void memory_add_breakpoint(uint64_t address)
 {
-	if (auto* file = fopen(path, "rb"))
-	{
-		fread(cartridge_rom, 1, sizeof(cartridge_rom), file);
-		fclose(file);
-	}
+	breakpoints.push_back(address);
 }
+
+void memory_remove_breakpoint(uint64_t address)
+{
+	breakpoints.erase(
+		std::remove(breakpoints.begin(), breakpoints.end(), address),
+		breakpoints.end()
+	);
+}
+
+void memory_enable_logging(bool enabled)
+{
+	logging_enabled = enabled;
+}
+
+extern uint8_t cartridge_rom[MB(64)];
 
 CartHeader* memory_get_rom_header()
 {
 	return (CartHeader*)cartridge_rom;
+}
+
+void memory_load_rom(const char* path, bool swap)
+{
+	if (auto* file = fopen(path, "rb"))
+	{
+		fread(cartridge_rom, 1, sizeof(cartridge_rom), file);
+
+		if (swap)
+		{
+			for (int i = 0; i < sizeof(cartridge_rom); i += 4)
+			{
+				auto& u32 = *(uint32_t*)&cartridge_rom[i];
+				u32 = bswap_32(u32);
+			}
+		}
+
+		fclose(file);
+	}
 }
 
 void memory_install_rw_callback(
@@ -108,7 +108,8 @@ void memory_install_rw_callback(
 	std::function<void(uint32_t, uint32_t, const void*)>&& write, 
 	const char* name)
 {
-	MemoryMapping mr{
+	MemoryMapping mr
+	{
 		{ start, end },
 		name,
 		std::move(read), std::move(write)
@@ -117,18 +118,95 @@ void memory_install_rw_callback(
 	mmu_map.push_back(std::move(mr));
 }
 
+struct TLBEntry
+{
+	uint32_t entry_lo0;
+	uint32_t entry_lo1;
+	uint32_t page_mask;
+	uint32_t entry_hi0;
+};
+
+static TLBEntry tlb_entries[64]{};
+
+static bool memory_do_tlb_translation(uint32_t& virtual_address)
+{
+	//https://gist.github.com/parasyte/6547020
+	for (const auto& entry : tlb_entries)
+	{
+		const auto mask = (entry.page_mask >> 1) & 0x0FFF;
+		const auto page_size = mask + 1;
+		const auto vpn = entry.entry_hi0 & ~(entry.page_mask & 0x1FFF);
+
+		if ((virtual_address & vpn) == vpn)
+		{
+			uint32_t phys_frame_number{};
+
+			const auto odd = virtual_address & page_size;
+			const auto even = !odd;
+
+			if (even)
+			{
+				if (!(entry.entry_lo0 & 0x02)) 
+					continue;
+				
+				phys_frame_number = (entry.entry_lo0 >> 6) & 0x00FFFFFF;
+			}
+			else
+			{
+				if (!(entry.entry_lo1 & 0x02))
+					continue;
+
+				phys_frame_number = (entry.entry_lo1 >> 6) & 0x00FFFFFF;
+			}
+
+			auto phys_address = 
+				(0x80000000 | (phys_frame_number * page_size) | (virtual_address & mask));
+
+			virtual_address = phys_address;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 enum class ReadWrite { Read, Write };
 bool memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
 {
+	uint32_t virtual_address{address};
+	bool valid{};
+
 	switch (address)
 	{
-		// KUSEG  TLB mapping
+		// USEG  TLB mapped
 		case 0x00000000 ... 0x7FFFFFFF:
-			// user mode segment, all good!
-			// TODO: confirm we're in user mode
-			//printf("Unsupported TLB access: KUSEG (0x%08X)\n", address);
-			//throw nullptr;
-			break;
+		{
+			//if (!memory_do_tlb_translation(address))
+			{
+			//	printf("\nUnsupported TLB access: USEG (0x%08X)\n", address);
+			//	return false;
+			}
+		} break;
+
+		// KSSEG  TLB mapped
+		case 0xC0000000 ... 0xDFFFFFFF:
+		{
+			if (!memory_do_tlb_translation(address))
+			{
+				printf("\nUnsupported TLB access: KSSEG (0x%08X)\n", address);
+				return false;
+			}
+		} break;
+		
+		// KSEG3  TLB mapped
+		case 0xE0000000 ... 0xFFFFFFFF: 
+		{
+			if (!memory_do_tlb_translation(address))
+			{
+				printf("\nUnsupported TLB access: KSEG3 (0x%08X)\n", address);
+				return false;
+			}
+		} break;
 
 		// KSEG0  Direct map, cache
 		case 0x80000000 ... 0x9FFFFFFF: 
@@ -139,44 +217,49 @@ bool memory_map(ReadWrite rw, uint32_t address, uint32_t size, void* data)
 		case 0xA0000000 ... 0xBFFFFFFF: 
 			address -= 0xA0000000;
 			break;
-		
-		// KSSEG  TLB mapping
-		case 0xC0000000 ... 0xDFFFFFFF: 
-			printf("\nUnsupported TLB access: KSSEG (0x%08X)\n", address);
-			return false;
-			break;
-		
-		// KSEG3  TLB mapping
-		case 0xE0000000 ... 0xFFFFFFFF: 
-			address -= 0xE0000000;
-			//printf("\nUnsupported TLB access: KSEG3 (0x%08X)\n", address);
-			//throw nullptr;
-			break;
 	}
 
-	for (const auto& entry : mmu_map)
+	auto match = std::find_if(mmu_map.begin(), mmu_map.end(), [address](const auto& e)
 	{
-		if (entry.range.contains(address))
-		{
-			/*if (!entry.range.contains(address + size))
-			{
-				printf("Memory access across bounds: 0x%08X::0x%08X (%s)\n", address, size, entry.name);
-				
-				throw nullptr;
-			}*/
+		return e.range.contains(address);
+	});
 
-			switch (rw)
-			{
-			case ReadWrite::Read:
-				entry.read(entry.range.map(address), size, data);
-				return true;
-				break;
-			
-			case ReadWrite::Write:
-				entry.write(entry.range.map(address), size, data);
-				return true;
-			}
+	for (auto bp : breakpoints)
+	{
+		if (bp == address)
+		{
+			printf("hit breakpoint 0x%08X\n", address);
+			getchar();
 		}
+	}
+
+	if (match != mmu_map.end())
+	{
+		switch (rw)
+		{
+		case ReadWrite::Read:
+			match->read(match->range.map(address), size, data);
+			
+			if (logging_enabled)
+				printf("\t(%s) Read 0x%08X[0x%08X]\n\n", match->name, address, *(uint32_t*)data);
+
+			valid = true;
+			break;
+		
+		case ReadWrite::Write:
+			match->write(match->range.map(address), size, data);
+			
+			if (logging_enabled)
+				printf("\t(%s) Write 0x%08X[0x%08X]\n\n", match->name, address, *(uint32_t*)data);
+
+			valid = true;
+			break;
+		}
+	}
+
+	if (valid)
+	{
+		return true;
 	}
 
 	printf("\nUnmapped memory access: 0x%08X::0x%08X\n", address, size);
@@ -223,7 +306,7 @@ bool memory_read16(uint32_t address, uint16_t& value)
 {
 	if (memory_read(address, 2, &value))
 	{
-		value = bswap_16(value);
+		//value = bswap_16(value);
 		return true;
 	}
 
@@ -234,7 +317,7 @@ bool memory_read32(uint32_t address, uint32_t& value)
 {
 	if (memory_read(address, 4, &value))
 	{
-		value = bswap_32(value);
+		//value = bswap_32(value);
 		return true;
 	}
 
@@ -248,12 +331,12 @@ bool memory_write8(uint32_t address, uint8_t data)
 
 bool memory_write16(uint32_t address, uint16_t data)
 {
-	data = bswap_16(data);
+	//data = bswap_16(data);
 	return memory_write(address, 2, &data);
 }
 
 bool memory_write32(uint32_t address, uint32_t data)
 {
-	data = bswap_32(data);
+	//data = bswap_32(data);
 	return memory_write(address, 4, &data);
 }

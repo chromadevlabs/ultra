@@ -3,13 +3,18 @@
 #include "cpu_types.h"
 #include "magic_enum.hpp"
 
+#include <capstone/capstone.h>
+
 #include <vector>
+#include <cstring>
 
 const char* parser_get_symbolic_cop0_name(int i);
 const char* parser_get_symbolic_gpr_name(int i);
 
 // implemented in cpu_instructions.cpp
 extern std::vector<EncodingDescriptor> encodings;
+static csh cs{};
+
 
 // string compare that is limited to the length of the second string
 constexpr bool str_find(const char* s1, const char* s2)
@@ -31,13 +36,40 @@ constexpr bool str_find(const char* s1, const char* s2)
 
 void disassembler_init()
 {
-	/*std::sort(encodings.begin(), encodings.end(), 
-		[](const EncodingDescriptor& d1, const EncodingDescriptor& d2)
-		{
-			return d1.mask < d2.mask;
-		}
-	);*/
+	/*auto err = cs_open(CS_ARCH_MIPS, CS_MODE_MIPS32, &cs);
+
+	if (err != CS_ERR_OK)
+	{
+		printf("%s\n", cs_strerror(err));
+	}*/
 }
+
+/*const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode)
+{
+	cs_insn* decoded{};
+
+	auto addr = cpu.pc;
+	if (auto count = cs_disasm(cs, (const uint8_t*)&opcode, sizeof(uint32_t), addr, 1, &decoded))
+	{
+		auto d = decoded[0];
+		char m[32]{};
+		strcpy(m, d.mnemonic);
+
+		std::transform(m + 0, m + strlen(m), m, toupper);
+
+		for (const auto& desc : encodings)
+		{
+			if (strcmp(m, magic_enum::enum_name(desc.type).data()) == 0)
+			{
+				return &desc;
+			}
+		}
+
+		printf("Unknown opcode '%s'\n", m);
+	}
+
+	return nullptr;
+}*/
 
 const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode)
 {
@@ -72,17 +104,17 @@ bool disassembler_parse_instruction(uint32_t opcode, const EncodingDescriptor* d
 			}
 			else if (str_find(str, "RS"))
 			{
-				dst_buf += sprintf(dst_buf, "%s", parser_get_symbolic_gpr_name(GET_RS_BITS(opcode)));
+				dst_buf += sprintf(dst_buf, "$%s", parser_get_symbolic_gpr_name(GET_RS_BITS(opcode)));
 				str += 2;
 			}
 			else if (str_find(str, "RT"))
 			{
-				dst_buf += sprintf(dst_buf, "%s", parser_get_symbolic_gpr_name(GET_RT_BITS(opcode)));
+				dst_buf += sprintf(dst_buf, "$%s", parser_get_symbolic_gpr_name(GET_RT_BITS(opcode)));
 				str += 2;
 			}
 			else if (str_find(str, "RD"))
 			{
-				dst_buf += sprintf(dst_buf, "%s", parser_get_symbolic_gpr_name(GET_RD_BITS(opcode)));
+				dst_buf += sprintf(dst_buf, "$%s", parser_get_symbolic_gpr_name(GET_RD_BITS(opcode)));
 				str += 2;
 			}
 			else if (str_find(str, "IMM"))
@@ -90,15 +122,15 @@ bool disassembler_parse_instruction(uint32_t opcode, const EncodingDescriptor* d
 				dst_buf += sprintf(dst_buf, "0x%04X", (uint16_t)GET_IMM_BITS(opcode));
 				str += 3;
 			}
-			else if (str_find(str, "SA"))
-			{
-				dst_buf += sprintf(dst_buf, "%d", GET_SHIFT_BITS(opcode));
-				str += 2;
-			}
 			else if (str_find(str, "OFFSET"))
 			{
 				dst_buf += sprintf(dst_buf, "%d", (int16_t)GET_IMM_BITS(opcode));
 				str += 6;
+			}
+			else if (str_find(str, "SA"))
+			{
+				dst_buf += sprintf(dst_buf, "%d", GET_SHIFT_BITS(opcode));
+				str += 2;
 			}
 			else if (str_find(str, "TARGET"))
 			{
@@ -158,7 +190,7 @@ const char* parser_get_symbolic_gpr_name(int i)
 {
 	switch (i)
 	{
-		case 0: return "r0";
+		case 0: return "0";
 		case 1: return "at";
 		
 		case 2: return "v0";

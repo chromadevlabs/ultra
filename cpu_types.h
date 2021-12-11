@@ -66,6 +66,25 @@ struct MemoryMappedRegister
 	}
 };
 
+template<typename T>
+struct Register
+{
+	T value;
+
+	auto& operator=(T other)
+	{
+		value = other;
+		return *this;
+	}
+
+	auto& operator=(Register<T> other)
+	{
+		value = other.value;
+		return *this;
+	}
+
+	operator T() const { return value; }
+};
 
 //https://mathcs.holycross.edu/~csci226/MIPS/summaryHO.pdf
 struct CPU
@@ -86,7 +105,37 @@ struct CPU
 	uint32_t fcr[2]{};
 	bool ll{};
 
-	uint64_t cop0[32]{};
+	struct
+	{
+		uint64_t r[32]{};
+
+		auto& index()		{ return r[0]; }
+		auto& random() 		{ return r[1]; }
+		auto& entry_lo0() 	{ return r[2]; }
+		auto& entry_hi0()	{ return r[3]; }
+		auto& context() 	{ return r[4]; }
+		auto& pagemask() 	{ return r[5]; }
+		auto& wired() 		{ return r[6]; }
+		auto& bad_vaddr() 	{ return r[8]; }
+		auto& count() 		{ return r[9]; }
+		auto& entry_hi() 	{ return r[10]; }
+		auto& compare() 	{ return r[11]; }
+		auto& status() 		{ return r[12]; }
+		auto& cause() 		{ return r[13]; }
+		auto& epc() 		{ return r[14]; }
+		auto& prid() 		{ return r[15]; }
+		auto& config() 		{ return r[16]; }
+		auto& ll_addr() 	{ return r[17]; }
+		auto& watch_lo() 	{ return r[18]; }
+		auto& watch_hi() 	{ return r[19]; }
+		auto& xcontext() 	{ return r[20]; }
+		auto& parity_error(){ return r[26]; }
+		auto& cache_error() { return r[27]; }
+		auto& tag_lo() 		{ return r[28]; }
+		auto& tag_hi() 		{ return r[29]; }
+		auto& error_epc() 	{ return r[30]; }
+	} cop0;
+
 	float cop1[32]{};
 
 	uint64_t r0() { return 0; }
@@ -126,47 +175,19 @@ struct CPU
 	auto& gp() { return gpr[28]; }
 	auto& sp() { return gpr[29]; }
 	auto& fp() { return gpr[30]; }
-	auto& ra() { return gpr[31]; }
-
-	auto& index() 		{ return cop0[0]; }
-	auto& random() 		{ return cop0[1]; }
-	auto& entry_lo0() 	{ return cop0[2]; }
-	auto& entry_hi0()	{ return cop0[3]; }
-	auto& context() 	{ return cop0[4]; }
-	auto& pagemask() 	{ return cop0[5]; }
-	auto& wired() 		{ return cop0[6]; }
-	auto& bad_vaddr() 	{ return cop0[8]; }
-	auto& count() 		{ return cop0[9]; }
-	auto& entry_hi() 	{ return cop0[10]; }
-	auto& compare() 	{ return cop0[11]; }
-	auto& status() 		{ return cop0[12]; }
-	auto& cause() 		{ return cop0[13]; }
-	auto& epc() 		{ return cop0[14]; }
-	auto& prid() 		{ return cop0[15]; }
-	auto& config() 		{ return cop0[16]; }
-	auto& ll_addr() 	{ return cop0[17]; }
-	auto& watch_lo() 	{ return cop0[18]; }
-	auto& watch_hi() 	{ return cop0[19]; }
-	auto& xcontext() 	{ return cop0[20]; }
-	auto& parity_error(){ return cop0[26]; }
-	auto& cache_error() { return cop0[27]; }
-	auto& tag_lo() 		{ return cop0[28]; }
-	auto& tag_hi() 		{ return cop0[29]; }
-	auto& error_epc() 	{ return cop0[30]; }	
+	auto& ra() { return gpr[31]; }	
 };
 
 extern CPU cpu;
 extern uint64_t branch_delay_slot_address;
-extern uint64_t cycle_counter;
-
 void cpu_link(uint64_t);
-void cpu_trap(const char*);
 
 struct ExecutionContext
 {
 	const uint32_t opbits;
 
 	constexpr uint8_t rd_bits() const { return GET_RD_BITS(opbits); }
+	constexpr uint8_t fs_bits() const { return rd_bits(); }
 	constexpr uint8_t rs_bits() const { return GET_RS_BITS(opbits); }
 	constexpr uint8_t rt_bits() const { return GET_RT_BITS(opbits); }
 	constexpr uint8_t shift_bits() const { return GET_SHIFT_BITS(opbits); }
@@ -178,6 +199,7 @@ struct ExecutionContext
 	auto& rs() { return cpu.gpr[rs_bits()]; }
 	auto& base() { return rd(); }
 	auto& rt() { return cpu.gpr[rt_bits()]; }
+	auto& fs() { return cpu.cop1[fs_bits()]; }
 
 	constexpr auto imm() const { return imm_bits(); }
 

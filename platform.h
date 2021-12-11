@@ -21,23 +21,17 @@
 #define CONCAT(x, y) 			CONCAT_IMPL(x, y)
 
 template<typename T>
-constexpr bool get_bit_left_aligned(T value, int index)
+constexpr bool get_bit(T value, int index)
 {
 	const auto size = (sizeof(T) * 8) - 1;
 	return (value >> (size - index)) & 1;
 }
 
 template<typename T>
-constexpr bool get_bit_right_aligned(T value, int index)
-{
-	return (value << index) & 1;
-}
-
-template<typename T>
-constexpr void set_bit_left_aligned(T& value, int index, bool state)
+constexpr void set_bit(T& value, int index, bool bit)
 {
 	const auto size = (sizeof(T) * 8) - 1;
-	if (state)
+	if (bit)
 	{
 		value |= 1 << (size - index);
 	}
@@ -48,23 +42,20 @@ constexpr void set_bit_left_aligned(T& value, int index, bool state)
 }
 
 template<typename T>
-constexpr void set_bit_right_aligned(T& value, int index, bool state)
+constexpr T extract_bits(T value, int index, int num_bits)
 {
-	if (state)
-	{
-		value |= 1 << (index);
-	}
-	else
-	{
-		value &= ~(1 << (index));
-	}
-}
+	T out{};
 
-template<typename T>
-constexpr T extract_bits_left_aligned(T value, int begin, int end)
-{
-    T mask = (1 << (end - begin)) - 1;
-    return (value >> begin) & mask;
+	int dst_index{};
+	for (int i = index; i < index + num_bits; i++)
+	{
+		auto b = get_bit(value, i);
+		set_bit(out, num_bits - dst_index, b);
+		
+		dst_index++;
+	}
+
+	return out;
 }
 
 template<typename T, typename TT>
