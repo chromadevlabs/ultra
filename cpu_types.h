@@ -31,6 +31,7 @@
 #define SET_SHIFT_BITS(value) 		((value & 0x1F) << 6)
 #define SET_FUNC_BITS(value) 		((value & 0x3F) << 0)
 #define SET_IMM_BITS(value)			(value & 0xFFFF)
+#define SET_JMP_BITS(value)			(value & 0x3FFFFFF)
 #define SET_OFFSET_BITS(value)		SET_IMM_BITS(value)
 
 using cpu_func_t = void(*)(struct ExecutionContext&);

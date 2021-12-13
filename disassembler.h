@@ -4,6 +4,9 @@
 #include "instruction_types.h"
 #include "cpu_types.h"
 
+#include <cstring>
+#include "magic_enum.hpp"
+
 struct EncodingDescriptor
 {
 	InstructionType type{};
@@ -13,7 +16,7 @@ struct EncodingDescriptor
 	uint32_t mask;
 	uint32_t value;
 
-	constexpr EncodingDescriptor() = default;
+	EncodingDescriptor() = default;
 	constexpr EncodingDescriptor(InstructionType inst, const char* descriptor, const char* debug_format_string, cpu_func_t _func) :
 		type(inst),
 		debug_format(debug_format_string),
@@ -21,7 +24,11 @@ struct EncodingDescriptor
 		mask(gen_mask(descriptor)),
 		value(gen_value(descriptor))
 	{
-		assert(strlen(descriptor) == 32);
+		if (strlen(descriptor) != 32)
+		{
+			printf("Invalid bit count for opcode descriptor '%s'\n", magic_enum::enum_name(inst).data());
+			assert(false);
+		}
 	}
 
 	constexpr bool match(uint32_t op) const 
@@ -94,6 +101,7 @@ struct EncodingDescriptor
 
 void disassembler_init();
 
+const EncodingDescriptor* disassembler_find_descriptor(InstructionType type);
 const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode);
 
 // dissasemble a single instruction into text form using symbolic register names

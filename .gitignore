@@ -4,4 +4,4 @@ build
 dependencies
 *.z64
 *.DS_Store
-
+output.txt

@@ -12,14 +12,16 @@ const char* parser_get_symbolic_cop0_name(int i);
 
 int main(int, const char**)
 {
-	freopen("../output.txt", "w", stdout);
+	cpu_run_tests();
 
-	cpu_init();
+	//freopen("../output.txt", "w", stdout);
+
+	/*cpu_init();
 
 	while (cpu_step())
 	{
 		//std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
+	}*/
 
 	return 0;
 }

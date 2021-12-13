@@ -109,12 +109,21 @@ R4300_IMPL(InstructionType::ADDIU, addiu,
 		cpu.pc += 4;
 	}
 
+R4300_IMPL(InstructionType::SUB, sub,
+	"000000" RS RT RD "00000" "100010",
+	"RD, RS, RT");
+	void cpu_sub(ExecutionContext& ctx)
+	{
+		ctx.rd() = (int32_t)ctx.rs() - (int32_t)ctx.rt();
+		cpu.pc += 4;
+	}
+
 R4300_IMPL(InstructionType::SUBU, subu,
 	"000000" RS RT RD "00000" "100011",
 	"RD, RS, RT");
 	void cpu_subu(ExecutionContext& ctx)
 	{
-		ctx.rd() = ctx.rs() - ctx.rt();
+		ctx.rd() = (uint32_t)ctx.rs() - (uint32_t)ctx.rt();
 		cpu.pc += 4;
 	}
 
@@ -133,6 +142,28 @@ R4300_IMPL(InstructionType::MULTU, multu,
 	void cpu_multu(ExecutionContext& ctx)
 	{
 		cpu.hi_lo = ctx.rt() * ctx.rs();
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::DIV, div,
+	"000000" RS RT "0000000000" "011010",
+	"RS, RT");
+	void cpu_div(ExecutionContext& ctx)
+	{
+		cpu.hi = (int32_t)ctx.rs() % (int32_t)ctx.rt();
+		cpu.lo = (int32_t)ctx.rs() / (int32_t)ctx.rt();
+
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::DIVU, divu,
+	"000000" RS RT "0000000000" "011011",
+	"RS, RT");
+	void cpu_divu(ExecutionContext& ctx)
+	{
+		cpu.hi = (uint32_t)ctx.rs() % (uint32_t)ctx.rt();
+		cpu.lo = (uint32_t)ctx.rs() / (uint32_t)ctx.rt();
+
 		cpu.pc += 4;
 	}
 
@@ -164,6 +195,15 @@ R4300_IMPL(InstructionType::LUI, lui,
 		cpu.pc += 4;
 	}
 
+R4300_IMPL(InstructionType::NOR, nor,
+	"000000" RS RT RD "00000" "100111",
+	"RD, RS, RT");
+	void cpu_nor(ExecutionContext& ctx)
+	{
+		ctx.rd() = ~(ctx.rs() | ctx.rt());
+		cpu.pc += 4;
+	}
+
 R4300_IMPL(InstructionType::MFLO, mflo,
 	"000000" "0000000000" RD "00000" "010010",
 	"RD");
@@ -174,11 +214,29 @@ R4300_IMPL(InstructionType::MFLO, mflo,
 	}
 
 R4300_IMPL(InstructionType::MFHI, mfhi,
-	"00000" "00000000000" RD "00000" "010000",
+	"000000" "0000000000" RD "00000" "010000",
 	"RD");
 	void cpu_mfhi(ExecutionContext& ctx)
 	{
 		ctx.rd() = cpu.hi;
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::MTHI, mthi,
+	"000000" RS "000000000000000" "010001",
+	"RS");
+	void cpu_mthi(ExecutionContext& ctx)
+	{
+		cpu.hi = ctx.rs();
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::MTLO, mtlo,
+	"000000" RS "000000000000000" "010011",
+	"RS");
+	void cpu_mtlo(ExecutionContext& ctx)
+	{
+		cpu.lo = ctx.rs();
 		cpu.pc += 4;
 	}
 
@@ -239,7 +297,8 @@ R4300_IMPL(InstructionType::J, j,
 	void cpu_j(ExecutionContext& ctx)
 	{
 		branch_delay_slot_address = cpu.pc + 4;
-		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() << 2);
+
+		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() * 4) + 4;
 		
 		if (logging_enabled)
 			printf("\tBranch taken: 0x%016llX\n", cpu.pc);
@@ -281,7 +340,7 @@ R4300_IMPL(InstructionType::BAL, bal,
 		branch_delay_slot_address = cpu.pc + 4;
 
 		cpu_link(cpu.pc + 8);
-		int32_t off = ctx.offset() << 2;
+		int32_t off = ctx.offset() * 4;
 		cpu.pc += off + 4;
 
 		if (logging_enabled)
@@ -305,7 +364,27 @@ R4300_IMPL(InstructionType::BEQ, beq,
 		if (ctx.rs() == ctx.rt())
 		{
 			branch_delay_slot_address = cpu.pc + 4;
-			int32_t off = ctx.offset() << 2;
+			int32_t off = ctx.offset() * 4;
+			cpu.pc += off + 4;
+
+			if (logging_enabled)
+				printf("\tBranch taken: 0x%016llX\n", cpu.pc);
+		}
+		else
+		{
+			cpu.pc += 8;
+		}
+	}
+
+R4300_IMPL(InstructionType::BGTZ, bgtz,
+	"000111" RS "00000" IMM16,
+	"RS, OFFSET");
+	void cpu_bgtz(ExecutionContext& ctx)
+	{
+		if (ctx.rs() > 0)
+		{
+			branch_delay_slot_address = cpu.pc + 4;
+			int32_t off = ctx.offset() * 4;
 			cpu.pc += off + 4;
 
 			if (logging_enabled)
@@ -331,7 +410,7 @@ R4300_IMPL(InstructionType::BNEL, bne,
 		if (ctx.rs() != ctx.rt())
 		{
 			branch_delay_slot_address = cpu.pc + 4;
-			int32_t off = ctx.offset() << 2;
+			int32_t off = ctx.offset() * 4;
 			cpu.pc += off + 4;
 
 			if (logging_enabled)
@@ -354,7 +433,7 @@ R4300_IMPL(InstructionType::BGEZL, bgez,
 		if (int32_t(ctx.rs()) >= 0)
 		{
 			branch_delay_slot_address = cpu.pc + 4;
-			int32_t off = ctx.offset() << 2;
+			int32_t off = ctx.offset() * 4;
 			cpu.pc += (off & 0x3FFFF) + 4;
 
 			if (logging_enabled)
@@ -366,6 +445,9 @@ R4300_IMPL(InstructionType::BGEZL, bgez,
 		}
 	}
 
+R4300_IMPL(InstructionType::BLEZ, blezl,
+	"000110" RS "00000" IMM16,
+	"RS, OFFSET");
 R4300_IMPL(InstructionType::BLEZL, blezl,
 	"010110" RS "00000" IMM16,
 	"RS, OFFSET");
@@ -374,7 +456,7 @@ R4300_IMPL(InstructionType::BLEZL, blezl,
 		if (int32_t(ctx.rs()) <= 0)
 		{
 			branch_delay_slot_address = cpu.pc + 4;
-			int32_t off = ctx.offset() << 2;
+			int32_t off = ctx.offset() * 4;
 			cpu.pc += (off & 0x3FFFF) + 4;
 
 			if (logging_enabled)
@@ -394,7 +476,7 @@ R4300_IMPL(InstructionType::BLTZ, bltz,
 		if (int32_t(ctx.rs()) < 0)
 		{
 			branch_delay_slot_address = cpu.pc + 4;
-			int32_t off = ctx.offset() << 2;
+			int32_t off = ctx.offset() * 4;
 			cpu.pc += (off & 0x3FFFF) + 4;
 
 			if (logging_enabled)
@@ -530,7 +612,7 @@ R4300_IMPL(InstructionType::CTC1, ctc1,
 /**************************************************************************/
 
 R4300_IMPL(InstructionType::SLL, sll,
-	"000000" "00000" RT RD SHIFT "000000",
+	"000000" RS RT RD SHIFT "000000",
 	"RD, RT, SA");
 	void cpu_sll(ExecutionContext& ctx)
 	{

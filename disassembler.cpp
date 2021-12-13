@@ -3,8 +3,6 @@
 #include "cpu_types.h"
 #include "magic_enum.hpp"
 
-#include <capstone/capstone.h>
-
 #include <vector>
 #include <cstring>
 
@@ -13,8 +11,6 @@ const char* parser_get_symbolic_gpr_name(int i);
 
 // implemented in cpu_instructions.cpp
 extern std::vector<EncodingDescriptor> encodings;
-static csh cs{};
-
 
 // string compare that is limited to the length of the second string
 constexpr bool str_find(const char* s1, const char* s2)
@@ -70,6 +66,17 @@ void disassembler_init()
 
 	return nullptr;
 }*/
+
+const EncodingDescriptor* disassembler_find_descriptor(InstructionType type)
+{
+	for (const auto& encoding : encodings)
+	{
+		if (encoding.type == type)
+			return &encoding;
+	}
+
+	return nullptr;
+}
 
 const EncodingDescriptor* disassembler_decode_instruction(uint32_t opcode)
 {
