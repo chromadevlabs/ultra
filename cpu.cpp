@@ -25,7 +25,7 @@ CPU cpu{};
 uint64_t branch_delay_slot_address{};
 uint64_t cycle_counter{};
 
-static uint8_t rdram[MB(8)];
+uint8_t rdram[MB(8)];
 //static uint8_t rdram[0x03EFFFFF];
 static uint8_t pif_ram[0x3F];
 uint8_t cartridge_rom[MB(64)];
@@ -304,8 +304,6 @@ static MemoryMappedRegister<uint32_t> VI_Y_SCALE_REG = {
 	}
 };
 
-
-
 template<typename T>
 void bind_register(MemoryMappedRegister<T>* reg, uint32_t addr_start, uint32_t addr_end, const char* name)
 {
@@ -536,7 +534,8 @@ void cpu_init()
 
 void cpu_get_cop0_register(int index, uint64_t& value)
 {
-	throw nullptr;
+	printf("Unsupported COP0 register read: %d\n", index);
+	value = cpu.cop0.r[index];
 }
 
 void cpu_set_cop0_register(int index, uint64_t value)
@@ -557,7 +556,8 @@ void cpu_set_cop0_register(int index, uint64_t value)
 
 		default:
 			printf("Unsupported COP0 register write: %d\n", index);
-			throw nullptr;
+			cpu.cop0.r[index] = value;
+			//throw nullptr;
 			break;
 	}
 }

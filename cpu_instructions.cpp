@@ -298,8 +298,22 @@ R4300_IMPL(InstructionType::J, j,
 	{
 		branch_delay_slot_address = cpu.pc + 4;
 
-		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() * 4) + 4;
+		cpu.pc = (cpu.pc & 0xF0000000) | (ctx.jmp() * 4);
 		
+		if (logging_enabled)
+			printf("\tBranch taken: 0x%016llX\n", cpu.pc);
+	}
+
+R4300_IMPL(InstructionType::JAL, jal,
+	"000011" TARGET,
+	"TARGET");
+	void cpu_jal(ExecutionContext& ctx)
+	{
+		branch_delay_slot_address = cpu.pc + 4;
+
+		cpu_link(cpu.pc + 8);
+		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() * 4);
+
 		if (logging_enabled)
 			printf("\tBranch taken: 0x%016llX\n", cpu.pc);
 	}
@@ -310,23 +324,8 @@ R4300_IMPL(InstructionType::JALR, jalr,
 	void cpu_jalr(ExecutionContext& ctx)
 	{
 		branch_delay_slot_address = cpu.pc + 4;
-		ctx.rd() = cpu.pc + 4;
+		ctx.rd() = cpu.pc;
 		cpu.pc = ctx.rs();
-
-		if (logging_enabled)
-			printf("\tBranch taken: 0x%016llX\n", cpu.pc);
-	}
-
-
-R4300_IMPL(InstructionType::JAL, jal,
-	"000011" TARGET,
-	"TARGET");
-	void cpu_jal(ExecutionContext& ctx)
-	{
-		branch_delay_slot_address = cpu.pc + 4;
-
-		cpu_link(cpu.pc + 8);
-		cpu.pc = (cpu.pc & 0xF0000000) + (ctx.jmp() << 2);
 
 		if (logging_enabled)
 			printf("\tBranch taken: 0x%016llX\n", cpu.pc);
@@ -493,6 +492,21 @@ R4300_IMPL(InstructionType::BLTZ, bltz,
 // Load/Store
 /**************************************************************************/
 
+R4300_IMPL(InstructionType::LB, lb,
+	"100000" BASE RT IMM16,
+	"RT, OFFSET(RS)");
+	void cpu_lb(ExecutionContext& ctx)
+	{
+		uint8_t v{};
+		uint32_t addr = ctx.rs() + ctx.imm();
+
+		if (!memory_read8(addr, v))
+			throw MemException{"bad mem read", addr, 1 };
+
+		ctx.rt() = (int8_t)v;
+		cpu.pc += 4;
+	}
+
 R4300_IMPL(InstructionType::LBU, lbu,
 	"100100" BASE RT IMM16,
 	"RT, OFFSET(RS)");
@@ -504,6 +518,38 @@ R4300_IMPL(InstructionType::LBU, lbu,
 		if (!memory_read8(addr, v))
 			throw MemException{"bad mem read", addr, 1 };
 
+		ctx.rt() = (uint8_t)v;
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::LH, lh,
+	"100001" BASE RT IMM16,
+	"RT, OFFSET(RS)");
+	void cpu_lh(ExecutionContext& ctx)
+	{
+		uint16_t v{};
+		uint32_t addr = ctx.rs() + ctx.imm();
+
+		if (!memory_read16(addr, v))
+			throw MemException{"bad mem read", addr, 1 };
+
+		//v = bswap_16(v);
+		ctx.rt() = (int16_t)v;
+		cpu.pc += 4;
+	}
+
+R4300_IMPL(InstructionType::LHU, lhu,
+	"100101" BASE RT IMM16,
+	"RT, OFFSET(RS)");
+	void cpu_lhu(ExecutionContext& ctx)
+	{
+		uint16_t v{};
+		uint32_t addr = ctx.rs() + ctx.imm();
+
+		if (!memory_read16(addr, v))
+			throw MemException{"bad mem read", addr, 1 };
+
+		//v = bswap_16(v);
 		ctx.rt() = v;
 		cpu.pc += 4;
 	}
@@ -522,6 +568,7 @@ R4300_IMPL(InstructionType::LW, lw,
 		if (!memory_read32(address, v))
 			throw MemException{"bad mem read", address, 4 };
 
+		//v = bswap_32(v);
 		ctx.rt() = (int32_t)v;
 
 		cpu.pc += 4;
@@ -532,22 +579,7 @@ R4300_IMPL(InstructionType::LWR, lwr,
 	"RT, OFFSET(RS)");
 	void cpu_lwr(ExecutionContext& ctx)
 	{
-		auto addr = ctx.base() + ctx.offset();
-
-		// top 2 bits are shift mode
-		auto off = addr & 3;
-
-		// clear top 3 bits and get value in mem
-		addr &= ~3;
-		uint32_t v{};
-		
-		if (!memory_read32(addr, v))
-			throw MemException{"bad mem read", uint32_t(addr), 4 };
-	
-		auto rt = (int32_t)ctx.rt() & LWR_MASK[off];
-		ctx.rt() = (int32_t)(rt | (v >> LWR_SHIFT[off]));
-
-		cpu.pc += 4;
+		throw nullptr;
 	}
 
 R4300_IMPL(InstructionType::SB, sb,
@@ -562,14 +594,32 @@ R4300_IMPL(InstructionType::SB, sb,
 		cpu.pc += 4;
 	}
 
+R4300_IMPL(InstructionType::SH, sh,
+	"101001" RS RT IMM16,
+	"RT, OFFSET(RS)");
+	void cpu_sh(ExecutionContext& ctx)
+	{
+		auto addr = ctx.rs() + ctx.offset();
+		uint16_t val = ctx.rt();
+
+		//val = bswap_16(val);
+		if (!memory_write16(addr, val))
+			throw MemException{"bad mem write", uint32_t(addr), 1 };
+
+		cpu.pc += 4;
+	}
+
 R4300_IMPL(InstructionType::SW, sw,
 	"101011" RS RT IMM16,
 	"RT, OFFSET(RS)");
 	void cpu_sw(ExecutionContext& ctx)
 	{
 		auto addr = ctx.rs() + ctx.offset();
+		uint32_t val = ctx.rt();
 
-		if (!memory_write32(addr, ctx.rt() & 0xFFFFFFFF))
+		//val = bswap_32(val);
+
+		if (!memory_write32(addr, val))
 			throw MemException{"bad mem write", uint32_t(addr), 4};
 
 		cpu.pc += 4;

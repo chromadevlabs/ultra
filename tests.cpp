@@ -1,9 +1,12 @@
 
+#include "cpu.h"
 #include "cpu_types.h"
 #include "disassembler.h"
 
 #include <cstring>
 #include <functional>
+
+extern uint8_t rdram[MB(8)];
 
 void cpu_test_reset()
 {
@@ -28,6 +31,8 @@ printf("TEST %s: %s == %d (expected %d) Failed!!\n", #Type, #target, (int)target
 
 void cpu_run_tests()
 {
+	cpu_init();
+
 	{
 		cpu_test_reset();
 		TEST(ADDI, 	SET_RT_BITS(1) | SET_RS_BITS(1) | SET_IMM_BITS(-10),	cpu.gpr[1], -10);
@@ -185,41 +190,87 @@ void cpu_run_tests()
 		cpu.pc = 0;
 		cpu.gpr[1] = 1;
 		cpu.gpr[2] = 1;
-		TEST(BEQ,	SET_RS_BITS(1) | SET_RT_BITS(2) | SET_IMM_BITS(2), 		cpu.pc,		 (2 * 4) + 4);
+		TEST(BEQ,	SET_RS_BITS(1) | SET_RT_BITS(2) | SET_IMM_BITS(2), 		cpu.pc,		4 + (2 * 4));
 		
-		cpu.pc = 0;
-		cpu.gpr[2] = 0;
-		TEST(BEQ,	SET_RS_BITS(1) | SET_RT_BITS(2) | SET_IMM_BITS(2), 		cpu.pc,		(1 * 4) + 4);
-
 		cpu.pc = 0;
 		cpu.gpr[1] = 0;
-		TEST(BEQZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		(2 * 4) + 4);
+		TEST(BEQZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		4 + (2 * 4));
 		
 		cpu.pc = 0;
-		cpu.gpr[1] = 1;
-		TEST(BEQZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		(1 * 4) + 4);
-
-		cpu.pc = 0;
 		cpu.gpr[1] = 10;
-		TEST(BGTZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		(2 * 4) + 4);
+		TEST(BGTZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		4 + (2 * 4));
 
 		cpu.pc = 0;
 		cpu.gpr[1] = -10;
-		TEST(BLEZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		(2 * 4) + 4);
+		TEST(BLEZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		4 + (2 * 4));
 
 		cpu.pc = 0;
 		cpu.gpr[1] = -10;
-		TEST(BLTZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		(2 * 4) + 4);
+		TEST(BLTZ,	SET_RS_BITS(1) | SET_IMM_BITS(2), 						cpu.pc,		4 + (2 * 4));
 
 		cpu.pc = 0;
 		cpu.gpr[1] = -10;
-		TEST(BNE,	SET_RS_BITS(1) | SET_RT_BITS(2) | SET_IMM_BITS(2), 		cpu.pc,		(2 * 4) + 4);
+		TEST(BNE,	SET_RS_BITS(1) | SET_RT_BITS(2) | SET_IMM_BITS(2), 		cpu.pc,		4 + (2 * 4));
 
 		cpu.pc = 0;
-		TEST(J,		SET_JMP_BITS(1), 										cpu.pc,		0x8);
+		TEST(J,		SET_JMP_BITS(2), 										cpu.pc,		(2 * 4));
+
+		cpu.pc = 0;
+		TEST(JAL,	SET_JMP_BITS(2), 										cpu.pc,		(2 * 4));
+
+		cpu.pc = 0;
+		TEST(JAL,	SET_JMP_BITS(2), 										cpu.gpr[31],0x8);
+
+		cpu.pc = 0x1000;
+		cpu.gpr[2] = 0x2000;
+		TEST(JALR,	SET_RD_BITS(1) | SET_RS_BITS(2), 						cpu.gpr[1],	0x1000);
+		TEST(JALR,	SET_RD_BITS(1) | SET_RS_BITS(2), 						cpu.pc,		0x2000);
+
+		cpu.pc = 0x1000;
+		cpu.gpr[1] = 0x2000;
+		TEST(JR,	SET_RS_BITS(2), 										cpu.pc,		0x2000);
 	}
 
 	{
-		
+		cpu_test_reset();
+
+		cpu.cop0.r[1] = 0x1000;
+		TEST(MFC0, 	SET_RT_BITS(1) | SET_RD_BITS(1), 						cpu.gpr[1],	0x1000);
+
+		cpu.cop0.r[1] = 0;
+		cpu.gpr[1] = 0x1000;
+		TEST(MTC0, 	SET_RT_BITS(1) | SET_RD_BITS(1),						cpu.cop0.r[1], 0x1000);
+	}
+
+	{
+		cpu_test_reset();
+
+		rdram[0] = -10;
+		TEST(LB, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], -10);
+
+		rdram[0] = 0xDE;
+		TEST(LBU, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], 0xDE);
+
+		*(uint16_t*)&rdram[0] = -12345;
+		TEST(LH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], -12345);
+
+		*(int16_t*)&rdram[0] = 0xdead;
+		TEST(LHU, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], 0xdead);
+
+		*(int32_t*)&rdram[0] = -3200000;
+		TEST(LW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], -3200000);
+	}
+
+	{
+		cpu_test_reset();
+
+		cpu.gpr[1] = 0xef;
+		TEST(SB, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint8_t*)&rdram[0], 0xef);
+
+		cpu.gpr[1] = 0xbeef;
+		TEST(SH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint16_t*)&rdram[0], 0xbeef);
+
+		cpu.gpr[1] = 0xdeadbeef;
+		TEST(SW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint32_t*)&rdram[0], 0xdeadbeef);
 	}
 }

@@ -28,7 +28,7 @@ enum class InstructionType : uint8_t
 	CACHE,
 	SYSCALL,
 	LWR,
-	LB, LBU, LH, LHU, LW, LWU,
+	LB, LBU, LH, LHU, LW,
 	SB, SH, SW,
 	NOP,
 
