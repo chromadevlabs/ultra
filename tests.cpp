@@ -6,6 +6,12 @@
 #include <cstring>
 #include <functional>
 
+// Mac OS X / Darwin features
+#include <libkern/OSByteOrder.h>
+#define bswap_16(x) 			OSSwapInt16(x)
+#define bswap_32(x) 			OSSwapInt32(x)
+#define bswap_64(x) 			OSSwapInt64(x)
+
 extern uint8_t rdram[MB(8)];
 
 void cpu_test_reset()
@@ -31,6 +37,8 @@ printf("TEST %s: %s == %d (expected %d) Failed!!\n", #Type, #target, (int)target
 
 void cpu_run_tests()
 {
+	printf("Running CPU Tests...\n");
+	
 	cpu_init();
 
 	{
@@ -251,14 +259,14 @@ void cpu_run_tests()
 		rdram[0] = 0xDE;
 		TEST(LBU, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], 0xDE);
 
-		*(uint16_t*)&rdram[0] = -12345;
-		TEST(LH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], -12345);
+		*(int16_t*)&rdram[0] = -12345;
+		TEST(LH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], bswap_16(-12345));
 
-		*(int16_t*)&rdram[0] = 0xdead;
-		TEST(LHU, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], 0xdead);
+		*(uint16_t*)&rdram[0] = 0xdead;
+		TEST(LHU, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], bswap_16(0xdead));
 
 		*(int32_t*)&rdram[0] = -3200000;
-		TEST(LW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], -3200000);
+		TEST(LW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0),	cpu.gpr[1], bswap_32(-3200000));
 	}
 
 	{
@@ -268,9 +276,9 @@ void cpu_run_tests()
 		TEST(SB, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint8_t*)&rdram[0], 0xef);
 
 		cpu.gpr[1] = 0xbeef;
-		TEST(SH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint16_t*)&rdram[0], 0xbeef);
+		TEST(SH, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint16_t*)&rdram[0], bswap_16(0xbeef));
 
 		cpu.gpr[1] = 0xdeadbeef;
-		TEST(SW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint32_t*)&rdram[0], 0xdeadbeef);
+		TEST(SW, 	SET_RT_BITS(1) | SET_RS_BITS(0) | SET_OFFSET_BITS(0), 	*(uint32_t*)&rdram[0], bswap_32(0xdeadbeef));
 	}
 }

@@ -306,7 +306,7 @@ bool memory_read16(uint32_t address, uint16_t& value)
 {
 	if (memory_read(address, 2, &value))
 	{
-		//value = bswap_16(value);
+		value = bswap_16(value);
 		return true;
 	}
 
@@ -317,7 +317,7 @@ bool memory_read32(uint32_t address, uint32_t& value)
 {
 	if (memory_read(address, 4, &value))
 	{
-		//value = bswap_32(value);
+		value = bswap_32(value);
 		return true;
 	}
 
@@ -331,12 +331,12 @@ bool memory_write8(uint32_t address, uint8_t data)
 
 bool memory_write16(uint32_t address, uint16_t data)
 {
-	//data = bswap_16(data);
+	data = bswap_16(data);
 	return memory_write(address, 2, &data);
 }
 
 bool memory_write32(uint32_t address, uint32_t data)
 {
-	//data = bswap_32(data);
+	data = bswap_32(data);
 	return memory_write(address, 4, &data);
 }

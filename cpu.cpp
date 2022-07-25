@@ -517,14 +517,14 @@ void cpu_init()
 	memory_write32(0x04300004, 0x10101010);
 	/*******************************************************/
 
-	memory_load_rom(
+	/*memory_load_rom(
 		"/Users/chroma/Downloads/N64-master/HelloWorld/16BPP/HelloWorldCPU320x240/HelloWorldCPU16BPP320X240.N64",
-		true
+		false
 	);
 
 	printf("Copying rom code to rdram...");
 	memory_do_dma(0xA4000000, 0xB0000000, 0x1000);
-	printf("OK!\n");
+	printf("OK!\n");*/
 
 	//cpu.pc = memory_get_rom_header()->pc;
 	cpu.pc = 0xFFFFFFFFA4000040;
