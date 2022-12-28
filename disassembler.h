@@ -9,94 +9,94 @@
 
 struct EncodingDescriptor
 {
-	InstructionType type{};
-	const char* debug_format{};
-	cpu_func_t func;
+    InstructionType type{};
+    const char* debug_format{};
+    cpu_func_t func;
 
-	uint32_t mask;
-	uint32_t value;
+    uint32_t mask;
+    uint32_t value;
 
-	EncodingDescriptor() = default;
-	constexpr EncodingDescriptor(InstructionType inst, const char* descriptor, const char* debug_format_string, cpu_func_t _func) :
-		type(inst),
-		debug_format(debug_format_string),
-		func(_func),
-		mask(gen_mask(descriptor)),
-		value(gen_value(descriptor))
-	{
-		if (strlen(descriptor) != 32)
-		{
-			printf("Invalid bit count for opcode descriptor '%s'\n", magic_enum::enum_name(inst).data());
-			assert(false);
-		}
-	}
+    EncodingDescriptor() = default;
+    constexpr EncodingDescriptor(InstructionType inst, const char* descriptor, const char* debug_format_string, cpu_func_t _func) :
+        type(inst),
+        debug_format(debug_format_string),
+        func(_func),
+        mask(gen_mask(descriptor)),
+        value(gen_value(descriptor))
+    {
+        if (strlen(descriptor) != 32)
+        {
+            printf("Invalid bit count for opcode descriptor '%s'\n", magic_enum::enum_name(inst).data());
+            assert(false);
+        }
+    }
 
-	constexpr bool match(uint32_t op) const 
-	{
-		return (op & mask) == value;
-	}
+    constexpr bool match(uint32_t op) const
+    {
+        return (op & mask) == value;
+    }
 
-	constexpr uint32_t gen_mask(const char* str)
-	{
-		uint32_t mask{};
-		uint32_t bit_index{31};
+    constexpr uint32_t gen_mask(const char* str)
+    {
+        uint32_t mask{};
+        uint32_t bit_index{31};
 
-		while (*str)
-		{
-			switch (*str)
-			{
-				case '0':
-				case '1':
-					mask |= 1 << bit_index; 
-					break;
-				
-				case 's':
-				case 't':
-				case 'd':
-				case 'j':
-				case 'i':
-				case 'a':
-					break;
+        while (*str)
+        {
+            switch (*str)
+            {
+                case '0':
+                case '1':
+                    mask |= 1 << bit_index;
+                    break;
 
-				default: 
-					printf("unknown opcode bit type '%c'\n", *str);
-					assert(false);
-					break;
-			}
+                case 's':
+                case 't':
+                case 'd':
+                case 'j':
+                case 'i':
+                case 'a':
+                    break;
 
-			str++;
-			bit_index--;
-		}
+                default:
+                    printf("unknown opcode bit type '%c'\n", *str);
+                    assert(false);
+                    break;
+            }
 
-		return mask;
-	}
+            str++;
+            bit_index--;
+        }
 
-	constexpr uint32_t gen_value(const char* str)
-	{
-		uint32_t value{};
-		uint32_t bit_index{31};
+        return mask;
+    }
 
-		while (*str)
-		{
-			switch (*str)
-			{
-				case '0':
-					break;
-				
-				case '1': 
-					value |= 1 << bit_index;
-					break;
-					
-				default: 
-					break;
-			}
+    constexpr uint32_t gen_value(const char* str)
+    {
+        uint32_t value{};
+        uint32_t bit_index{31};
 
-			str++;
-			bit_index--;
-		}
+        while (*str)
+        {
+            switch (*str)
+            {
+                case '0':
+                    break;
 
-		return value;
-	}
+                case '1':
+                    value |= 1 << bit_index;
+                    break;
+
+                default:
+                    break;
+            }
+
+            str++;
+            bit_index--;
+        }
+
+        return value;
+    }
 };
 
 void disassembler_init();

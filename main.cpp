@@ -12,18 +12,13 @@ const char* parser_get_symbolic_cop0_name(int i);
 
 int main(int, const char**)
 {
-	printf("Ultra alpha v0.1\n");
+    printf("Ultra alpha v0.1\n");
 
-	cpu_run_tests();
+    //freopen("../output.txt", "w", stdout);
 
-	//freopen("../output.txt", "w", stdout);
+    cpu_init();
 
-	//cpu_init();
+    while (cpu_step()) {}
 
-	//while (cpu_step())
-	{
-		//std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
-
-	return 0;
+    return 0;
 }

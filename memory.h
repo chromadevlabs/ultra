@@ -13,10 +13,10 @@ void memory_remove_breakpoint(uint64_t address);
 void memory_enable_logging(bool);
 
 void memory_install_rw_callback(
-	uint32_t start, uint32_t end, 
-	std::function<void(uint32_t, uint32_t, void*)>&& read, 
-	std::function<void(uint32_t, uint32_t, const void*)>&& write, 
-	const char* name
+    uint32_t start, uint32_t end,
+    std::function<void(uint32_t, uint32_t, void*)>&& read,
+    std::function<void(uint32_t, uint32_t, const void*)>&& write,
+    const char* name
 );
 
 bool memory_read(uint32_t address, uint32_t size, void* data);
